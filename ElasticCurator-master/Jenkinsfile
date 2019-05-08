@@ -1,0 +1,36 @@
+pipeline {
+    agent {label 'ecs'}
+
+    triggers {
+        cron('H 5 * * *')
+    }
+
+    environment {
+        MAX_INDEX_DAYS = 30
+        MAX_SNAPSHOT_DAYS = 90
+        ES_HOST = "vpc-msit-zbyvohzyezkt3nr6eo5e6zcq3e.us-west-2.es.amazonaws.com"
+        SNAPSHOT_REPOSITORY = "msit-es-index-backups"
+    }
+
+    stages {
+        stage('Build Curator Container') {
+            steps {
+                sh 'docker build -t elastic-curator .'
+            }
+        }
+
+        stage('Cleanup Snapshots and Indexes') {
+            steps {
+                sh 'docker run -e ES_HOST -e MAX_INDEX_DAYS -e MAX_SNAPSHOT_DAYS -e SNAPSHOT_REPOSITORY elastic-curator --config /curator/curator.yml /curator/cleanup_snapshots_and_indices.yml'
+            }
+        }
+    }
+
+    post {
+        always {
+            node('master') {
+                step([$class: 'Mailer', notifyEveryUnstableBuild: true, recipients: 'eric.dalling@hp.com', sendToIndividuals: false])
+            }
+        }
+    }
+}

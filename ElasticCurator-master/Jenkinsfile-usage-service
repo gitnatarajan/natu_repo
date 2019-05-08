@@ -1,0 +1,34 @@
+pipeline {
+    agent {label 'ecs'}
+
+    triggers {
+        cron('H 5 * * *')
+    }
+
+    environment {
+        MAX_INDEX_DAYS = 14
+        ES_HOST = "vpc-usage-service-5jyvv2hg7upggvyvqi3wnnfxsm.us-east-1.es.amazonaws.com"
+    }
+
+    stages {
+        stage('Build Curator Container') {
+            steps {
+                sh 'docker build -t elastic-curator .'
+            }
+        }
+
+        stage('Cleanup Snapshots and Indexes') {
+            steps {
+                sh 'docker run -e ES_HOST -e MAX_INDEX_DAYS elastic-curator --config /curator/curator.yml /curator/cleanup_usage_service_indices.yml'
+            }
+        }
+    }
+
+    post {
+        always {
+            node('master') {
+                step([$class: 'Mailer', notifyEveryUnstableBuild: true, recipients: 'eric.dalling@hp.com', sendToIndividuals: false])
+            }
+        }
+    }
+}
